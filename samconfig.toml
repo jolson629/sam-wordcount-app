@@ -1,0 +1,12 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "sam-wordcount-app"
+s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-i03870pw2s1y"
+s3_prefix = "sam-wordcount-app"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "SourceBucketName=\"sam-wordcount-app-src\" LoggingBucketName=\"sam-wordcount-app-logs\""
+
