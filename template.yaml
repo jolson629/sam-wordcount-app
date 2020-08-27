@@ -22,36 +22,36 @@ Resources:
       Properties:
          BucketName: !Ref LoggingBucketName
 
-  # Bucket policy enables CloudTrail to write to the logging bucketf
+  # Bucket policy enables CloudTrail to write to the logging bucket
    BucketPolicy: 
-      Type: AWS::S3::BucketPolicy
-   Properties: 
-      Bucket: 
+     Type: AWS::S3::BucketPolicy
+     Properties: 
+       Bucket: 
          Ref: LoggingBucket
-      PolicyDocument: 
+       PolicyDocument: 
          Version: "2012-10-17"
          Statement: 
-            - 
-               Sid: "AWSCloudTrailAclCheck"
-               Effect: "Allow"
-               Principal: 
-                 Service: "cloudtrail.amazonaws.com"
-               Action: "s3:GetBucketAcl"
-               Resource: 
-                  !Sub |-
-                     arn:aws:s3:::${LoggingBucket}
-            - 
-               Sid: "AWSCloudTrailWrite"
-               Effect: "Allow"
-               Principal: 
-                  Service: "cloudtrail.amazonaws.com"
-               Action: "s3:PutObject"
-               Resource:
-                  !Sub |-
-                     arn:aws:s3:::${LoggingBucket}/AWSLogs/${AWS::AccountId}/*
-               Condition: 
-                  StringEquals:
-                     s3:x-amz-acl: "bucket-owner-full-control"
+           - 
+             Sid: "AWSCloudTrailAclCheck"
+             Effect: "Allow"
+             Principal: 
+               Service: "cloudtrail.amazonaws.com"
+             Action: "s3:GetBucketAcl"
+             Resource: 
+               !Sub |-
+                 arn:aws:s3:::${LoggingBucket}
+           - 
+             Sid: "AWSCloudTrailWrite"
+             Effect: "Allow"
+             Principal: 
+               Service: "cloudtrail.amazonaws.com"
+             Action: "s3:PutObject"
+             Resource:
+               !Sub |-
+                 arn:aws:s3:::${LoggingBucket}/AWSLogs/${AWS::AccountId}/*
+             Condition: 
+               StringEquals:
+                 s3:x-amz-acl: "bucket-owner-full-control"
 
   # The CloudTrail trail - uses the LoggingBucketName as the trail name
    myTrail: 
@@ -66,12 +66,11 @@ Resources:
          IsMultiRegionTrail: false
          EventSelectors:
             - DataResources:
-            - Type: AWS::S3::Object
-              Values:
-               - !Sub |-
-                 arn:aws:s3:::${SourceBucket}/
+               - Type: AWS::S3::Object
+                 Values:
+                  - !Sub |-
+                    arn:aws:s3:::${SourceBucket}/
          IncludeGlobalServiceEvents: false
-
 
    # Lambda function
    EventConsumerFunction:
@@ -82,12 +81,18 @@ Resources:
          Runtime: python3.8
          Role: !Ref LambdaRole
 
+   # Cloudwatch group              
+   CloudWatchLogsGroup:
+      Type: AWS::Logs::LogGroup
+      Properties:
+         LogGroupName: /aws/ecs/sam-wordcount-app
+         RetentionInDays: 7 
+                 
    # ECS Cluster
    WordCountECSCluster:
       Type: AWS::ECS::Cluster
       Properties:
          ClusterName: sam-wordcount-app-cluster
-
 
    # Fargate task
    WordCount:
@@ -111,8 +116,8 @@ Resources:
                   Options:
                      awslogs-group: !Ref CloudWatchLogsGroup
                      awslogs-region: !Ref AWS::Region
-                     awslogs-stream-prefix: WordCount
-
+                     awslogs-stream-prefix: WordCount 
+                             
    # EventBridge rule - invokes EventConsumerFunction 
    EventRule: 
       Type: AWS::Events::Rule
@@ -134,8 +139,8 @@ Resources:
                   Fn::GetAtt: 
                      - "EventConsumerFunction"
                      - "Arn"
-               Id: "EventConsumerFunctionTarget"
-
+               Id: "EventConsumerFunctionTarget"  
+               
    PermissionForEventsToInvokeLambda: 
       Type: AWS::Lambda::Permission
       Properties: 
@@ -174,7 +179,6 @@ Resources:
                    - 'logs:CreateLogStream'
                    - 'logs:PutLogEvents'
                  Resource: '*'
-                 
    LambdaRole:
        Type: AWS::IAM::Role
        Properties:
@@ -199,11 +203,4 @@ Resources:
                   # ECS tasks to upload logs to CloudWatch
                   - 'logs:CreateLogStream'
                   - 'logs:PutLogEvents'
-                 Resource: '*'                 
-                                  
-   # Cloudwatch group              
-   CloudWatchLogsGroup:
-      Type: AWS::Logs::LogGroup
-      Properties:
-         LogGroupName: /aws/ecs/sam-wordcount-app
-         RetentionInDays: 7                 
+                 Resource: '*'                      
