@@ -31,14 +31,13 @@ def getCmdLineParser():
 def main(argv):
 
    tmp = '/tmp'
-   p = getCmdLineParser()
-   args = p.parse_args()
-
    bucket = None
    inputKey = None
    outputKey = None
    region = None
 
+   p = getCmdLineParser()
+   args = p.parse_args()
    
    if args.bucket is None:
       bucket = os.environ['BUCKET']

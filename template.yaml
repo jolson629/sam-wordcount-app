@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: S3-to-EventBridge Integration - Simple Invoke
+Description: sam-wordcount-app used to familiarize ourselves with a SAM deployment
 
 Parameters:
    SourceBucketName:
@@ -10,7 +10,7 @@ Parameters:
       Type: String
       Default: 'sam-wordcount-app-logs'
 
-Resources: 
+Resources:
   # S3 Bucket - A source bucket and a logging bucket
    SourceBucket: 
       Type: AWS::S3::Bucket
@@ -79,45 +79,8 @@ Resources:
          CodeUri: eventConsumer/
          Handler: app.lambda_handler
          Runtime: python3.8
-         Role: !Ref LambdaRole
-
-   # Cloudwatch group              
-   CloudWatchLogsGroup:
-      Type: AWS::Logs::LogGroup
-      Properties:
-         LogGroupName: /aws/ecs/sam-wordcount-app
-         RetentionInDays: 7 
-                 
-   # ECS Cluster
-   WordCountECSCluster:
-      Type: AWS::ECS::Cluster
-      Properties:
-         ClusterName: sam-wordcount-app-cluster
-
-   # Fargate task
-   WordCount:
-      Type: AWS::ECS::TaskDefinition
-      Properties: 
-         Cpu: "256"
-         Memory: "512"
-         ExecutionRoleArn: !Ref ECSTaskRole
-         Family: sam-wordcount-app
-         NetworkMode: awsvpc
-         RequiresCompatibilities:
-            - FARGATE
-         ContainerDefinitions:
-            -
-               Name: WordCount
-               Image: 543414031934.dkr.ecr.us-east-1.amazonaws.com/wordcount:0.9.1
-               PortMappings:
-                  - ContainerPort: 8080
-               LogConfiguration:
-                  LogDriver: awslogs
-                  Options:
-                     awslogs-group: !Ref CloudWatchLogsGroup
-                     awslogs-region: !Ref AWS::Region
-                     awslogs-stream-prefix: WordCount 
-                             
+         Role: !GetAtt LambdaRole.Arn
+           
    # EventBridge rule - invokes EventConsumerFunction 
    EventRule: 
       Type: AWS::Events::Rule
@@ -146,13 +109,79 @@ Resources:
       Properties: 
          FunctionName: 
             Ref: "EventConsumerFunction"
-            Action: "lambda:InvokeFunction"
-            Principal: "events.amazonaws.com"
+         Action: "lambda:InvokeFunction"
+         Principal: "events.amazonaws.com"
          SourceArn: 
             Fn::GetAtt: 
                - "EventRule"
                - "Arn"
 
+   # ECS Cluster
+   WordCountECSCluster:
+      Type: AWS::ECS::Cluster
+      Properties:
+         ClusterName: sam-wordcount-app-cluster
+
+
+   # Fargate task
+   WordCount:
+      Type: AWS::ECS::TaskDefinition
+      Properties: 
+         Cpu: "256"
+         Memory: "512"
+         ExecutionRoleArn: !Ref ECSTaskRole
+         Family: sam-wordcount-app
+         NetworkMode: awsvpc
+         RequiresCompatibilities:
+            - FARGATE
+         ContainerDefinitions:
+            -
+               Name: WordCount
+               Image: 543414031934.dkr.ecr.us-east-1.amazonaws.com/wordcount:0.9.1
+               PortMappings:
+                  - ContainerPort: 8080
+               LogConfiguration:
+                  LogDriver: awslogs
+                  Options:
+                     awslogs-group: !Ref CloudWatchLogsGroup
+                     awslogs-region: !Ref AWS::Region
+                     awslogs-stream-prefix: WordCount
+
+                                        
+   LambdaRole:
+       Type: AWS::IAM::Role
+       Properties:
+         AssumeRolePolicyDocument:
+            Statement:
+            - Effect: Allow
+              Principal:
+                Service: [lambda.amazonaws.com]
+              Action: ['sts:AssumeRole']
+         Path: /
+         Policies:
+           - PolicyName: AWSLambdaExecutionRolePolicy
+             PolicyDocument:
+               Statement:
+               - Effect: Allow
+                 Action:
+                  # Execute ECS Tasks
+                  - 'ecr:GetAuthorizationToken'
+                  - 'ecr:BatchCheckLayerAvailability'
+                  - 'ecr:GetDownloadUrlForLayer'
+                  - 'ecr:BatchGetImage'
+                  # ECS tasks to upload logs to CloudWatch
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                 Resource: '*'
+                 
+   # Cloudwatch group              
+   CloudWatchLogsGroup:
+      Type: AWS::Logs::LogGroup
+      Properties:
+         LogGroupName: /aws/ecs/sam-wordcount-app
+         RetentionInDays: 7  
+         
+         
    # Give ECS permission to access ECR and write logs to cloudwatch        
    ECSTaskRole:
       Type: AWS::IAM::Role
@@ -178,29 +207,4 @@ Resources:
                    # ECS tasks to upload logs to CloudWatch
                    - 'logs:CreateLogStream'
                    - 'logs:PutLogEvents'
-                 Resource: '*'
-   LambdaRole:
-       Type: AWS::IAM::Role
-       Properties:
-         AssumeRolePolicyDocument:
-            Statement:
-            - Effect: Allow
-              Principal:
-                Service: [ecs-tasks.amazonaws.com]
-              Action: ['sts:AssumeRole']
-         Path: /
-         Policies:
-           - PolicyName: AWSLambdaExecutionRolePolicy
-             PolicyDocument:
-               Statement:
-               - Effect: Allow
-                 Action:
-                  # Execute ECS Tasks
-                  - 'ecr:GetAuthorizationToken'
-                  - 'ecr:BatchCheckLayerAvailability'
-                  - 'ecr:GetDownloadUrlForLayer'
-                  - 'ecr:BatchGetImage'
-                  # ECS tasks to upload logs to CloudWatch
-                  - 'logs:CreateLogStream'
-                  - 'logs:PutLogEvents'
-                 Resource: '*'                      
+                 Resource: '*'             
