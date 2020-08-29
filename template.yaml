@@ -106,7 +106,7 @@ Resources:
                LAUNCH_TYPE: "FARGATE"
                TASK_DEFINITION: !Ref SamECSTask
                SUBNET_ID: !Ref SamVPC
-               CONTAINER_NAME: !Ref SamECSTask.ContainerDefinition.Name
+               CONTAINER_NAME: !Ref SamECSTask.ContainerDefinitions.Name
            
    # EventBridge monitors the SourceBucket...any events, it sends a message to the lambda for processing
    EventRule: 
