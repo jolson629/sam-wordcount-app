@@ -52,14 +52,14 @@ def lambda_handler(event, context):
    #TODO: Since this is invoked by EventBridge, are sys.exit(-1) and sys.exit(0) clean fail exits?
    
    #TODO: Collapse all parameters into a dictionary.
-   #TODO: How to pass these in at SAM deploy time? Environement variables for a Lambda??
-   cluster = 'sam-wordcount-app-cluster'
-   launchType = 'FARGATE'
-   taskDefinition = 'sam-wordcount-app:3'
-   subnetId = 'subnet-07b11355d0776a3af'
+   #TODO: Environment variables into Lambda. Do these get passed in when the lambda is executed locally, or are they None?   
    
-   # From the template.yaml file...
-   containerName = 'WordCount'
+   cluster = os.environ["CLUSTER"]
+   launchType = os.environ["LAUNCH_TYPE"]
+   taskDefinition = os.environ["TASK_DEFINITION"]
+   subnetId = os.environ["SUBNET_ID"]
+   containerName = os.environ["CONTAINER_NAME"]
+   
    s3Event = None
    bucket = None
    inputKey = None

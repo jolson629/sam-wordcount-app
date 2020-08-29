@@ -1,26 +1,46 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: sam-wordcount-app used to familiarize ourselves with a SAM deployment
+Description: App used to familiarize ourselves with a SAM deployment. Implementation is wordcount.
 
 Parameters:
-   SourceBucketName:
+   AppName:
       Type: String
-      Default: 'sam-wordcount-app-src'
-   LoggingBucketName:
+      Default: 'wordcount'      
+   ContainerImage:
       Type: String
-      Default: 'sam-wordcount-app-logs'
+      Default: '543414031934.dkr.ecr.us-east-1.amazonaws.com/wordcount:0.9.1'
 
 Resources:
-  # S3 Bucket - A source bucket and a logging bucket
+
+   # ECS in Fargate mode needs a subnet to run on. Create a VPC so we can create a subnet.
+   SamVPC:
+      Type: AWS::EC2::VPC
+      Properties: 
+         CidrBlock: 172.20.0.0/16
+         EnableDnsHostnames: True
+         EnableDnsSupport: True
+         InstanceTenancy: default
+         
+   # Subnet to run an ECS container in Fargate mode.         
+   SamSubnet:
+      Type: AWS::EC2::Subnet
+      Properties:
+        CidrBlock: 172.20.1.0/24
+        VpcId: !Ref SamVPC
+
+  # S3 bucket to use to collect input files. EventBridge will be monitoring this bucket.
    SourceBucket: 
       Type: AWS::S3::Bucket
       Properties:
-         BucketName: !Ref SourceBucketName
-
+         BucketName: !Sub |-
+            sam-${AppName}-app-src
+            
+   # S3 bucket to use to collect all logs the application generates
    LoggingBucket: 
       Type: AWS::S3::Bucket
       Properties:
-         BucketName: !Ref LoggingBucketName
+         BucketName: !Sub |-
+            sam-${AppName}-app-logs
 
   # Bucket policy enables CloudTrail to write to the logging bucket
    BucketPolicy: 
@@ -53,13 +73,13 @@ Resources:
                StringEquals:
                  s3:x-amz-acl: "bucket-owner-full-control"
 
-  # The CloudTrail trail - uses the LoggingBucketName as the trail name
-   myTrail: 
+  # The CloudTrail trail - logs to the logging bucket
+   appTrail: 
       Type: AWS::CloudTrail::Trail
       DependsOn: 
          - BucketPolicy
       Properties: 
-         TrailName: !Ref LoggingBucketName
+         TrailName: !Ref LoggingBucket
          S3BucketName: 
             Ref: LoggingBucket
          IsLogging: true
@@ -72,7 +92,7 @@ Resources:
                     arn:aws:s3:::${SourceBucket}/
          IncludeGlobalServiceEvents: false
 
-   # Lambda function
+   # Lambda function invoked by EventBridge on events on the s3 application bucket. If PutObject results, fire off an ECS Fargate job to process.
    EventConsumerFunction:
       Type: AWS::Serverless::Function
       Properties:
@@ -80,8 +100,15 @@ Resources:
          Handler: app.lambda_handler
          Runtime: python3.8
          Role: !GetAtt LambdaRole.Arn
+         Environment:
+            Variables:
+               CLUSTER: !Ref SamECSCluster
+               LAUNCH_TYPE: "FARGATE"
+               TASK_DEFINITION: !Ref SamECSTask
+               SUBNET_ID: !Ref SamVPC
+               CONTAINER_NAME: !Ref SamECSTask.ContainerDefinition.Name
            
-   # EventBridge rule - invokes EventConsumerFunction 
+   # EventBridge monitors the SourceBucket...any events, it sends a message to the lambda for processing
    EventRule: 
       Type: AWS::Events::Rule
       Properties: 
@@ -95,7 +122,7 @@ Resources:
                - "PutObject"
                requestParameters:
                   bucketName:
-                  - !Ref SourceBucketName
+                  - !Ref SourceBucket
          Targets: 
             - 
                Arn: 
@@ -103,7 +130,8 @@ Resources:
                      - "EventConsumerFunction"
                      - "Arn"
                Id: "EventConsumerFunctionTarget"  
-               
+
+   # Permissions for EventBridge to invoke a lambda function               
    PermissionForEventsToInvokeLambda: 
       Type: AWS::Lambda::Permission
       Properties: 
@@ -115,29 +143,32 @@ Resources:
             Fn::GetAtt: 
                - "EventRule"
                - "Arn"
-
-   # ECS Cluster
-   WordCountECSCluster:
+               
+   # ECS Cluster used to run the Fargate task to process the input using a containerized app.
+   SamECSCluster:
       Type: AWS::ECS::Cluster
       Properties:
-         ClusterName: sam-wordcount-app-cluster
-
-
-   # Fargate task
-   WordCount:
+         ClusterName: !Sub |-
+            sam-${AppName}-app-cluster
+            
+   # Fargate task on ECS Cluster
+   SamECSTask:
       Type: AWS::ECS::TaskDefinition
       Properties: 
          Cpu: "256"
          Memory: "512"
          ExecutionRoleArn: !Ref ECSTaskRole
-         Family: sam-wordcount-app
+         Family: !Sub |-
+            sam-${AppName}-app
          NetworkMode: awsvpc
          RequiresCompatibilities:
             - FARGATE
          ContainerDefinitions:
             -
-               Name: WordCount
-               Image: 543414031934.dkr.ecr.us-east-1.amazonaws.com/wordcount:0.9.1
+               Name: !Sub |-
+                  ${AppName}
+               Image: !Sub |-
+                  ${ContainerImage}
                PortMappings:
                   - ContainerPort: 8080
                LogConfiguration:
@@ -145,9 +176,10 @@ Resources:
                   Options:
                      awslogs-group: !Ref CloudWatchLogsGroup
                      awslogs-region: !Ref AWS::Region
-                     awslogs-stream-prefix: WordCount
+                     awslogs-stream-prefix: !Sub |-
+                        ${AppName}
 
-                                        
+   # Allow Lambda to invoke ECS, access ecr, and send logs to CloudTrail                                      
    LambdaRole:
        Type: AWS::IAM::Role
        Properties:
@@ -178,7 +210,8 @@ Resources:
    CloudWatchLogsGroup:
       Type: AWS::Logs::LogGroup
       Properties:
-         LogGroupName: /aws/ecs/sam-wordcount-app
+         LogGroupName: !Sub |-
+            /aws/ecs/sam-${AppName}-app
          RetentionInDays: 7  
          
          
@@ -207,4 +240,51 @@ Resources:
                    # ECS tasks to upload logs to CloudWatch
                    - 'logs:CreateLogStream'
                    - 'logs:PutLogEvents'
-                 Resource: '*'             
+                 Resource: '*'
+                 
+   # VPC Endpoint that allows the private subnet in the VPC to talk to AWS's S3 service without using the public internet              
+   SamS3Endpoint:
+      Type: AWS::EC2::VPCEndpoint
+      Properties: 
+        ServiceName: com.amazonaws.us-east-1.s3
+        VpcEndpointType: 'Gateway'
+        VpcId: !Ref SamVPC
+
+   # VPC Endpoint that allows the private subnet in the VPC to talk to AWS's logging service without using the public internet        
+   SamLogsEndpoint:
+      Type: AWS::EC2::VPCEndpoint
+      Properties: 
+        PrivateDnsEnabled: True
+        SecurityGroupIds: 
+          - !GetAtt SamVPC.DefaultSecurityGroup
+        ServiceName: 'com.amazonaws.us-east-1.logs'
+        SubnetIds: 
+          - !Ref SamSubnet
+        VpcEndpointType: 'Interface'
+        VpcId: !Ref SamVPC
+
+   # VPC Endpoint that allows the private subnet in the VPC to talk to AWS's ECR service without using the public internet. ECR service #1
+   SamEcrApiEndpoint:
+      Type: AWS::EC2::VPCEndpoint
+      Properties: 
+        PrivateDnsEnabled: True
+        SecurityGroupIds: 
+          - !GetAtt SamVPC.DefaultSecurityGroup
+        ServiceName: 'com.amazonaws.us-east-1.ecr.api'
+        SubnetIds: 
+          - !Ref SamSubnet
+        VpcEndpointType: 'Interface'
+        VpcId: !Ref SamVPC
+        
+   # VPC Endpoint that allows the private subnet in the VPC to talk to AWS's ECR service without using the public internet. ECR service #2
+   SamEcrDkrEndpoint:
+      Type: AWS::EC2::VPCEndpoint
+      Properties: 
+        PrivateDnsEnabled: True
+        SecurityGroupIds: 
+          - !GetAtt SamVPC.DefaultSecurityGroup
+        ServiceName: 'com.amazonaws.us-east-1.ecr.dkr'
+        SubnetIds: 
+          - !Ref SamSubnet
+        VpcEndpointType: 'Interface'
+        VpcId: !Ref SamVPC                              
