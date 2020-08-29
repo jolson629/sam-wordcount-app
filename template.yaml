@@ -105,7 +105,7 @@ Resources:
                CLUSTER: !Ref SamECSCluster
                LAUNCH_TYPE: "FARGATE"
                TASK_DEFINITION: !Ref SamECSTask
-               SUBNET_ID: !Ref SamVPC
+               SUBNET_ID: !Ref SamSubnet
                CONTAINER_NAME: !Sub |-
                   ${AppName}
            

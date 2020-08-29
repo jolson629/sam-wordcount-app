@@ -3,7 +3,7 @@ version = 0.1
 [default.deploy]
 [default.deploy.parameters]
 stack_name = "sam-wordcount-app"
-s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-19nh1lel68pav"
+s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-18bcsig0n4wvl"
 s3_prefix = "sam-wordcount-app"
 region = "us-east-1"
 confirm_changeset = true
