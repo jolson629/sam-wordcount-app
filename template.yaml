@@ -8,7 +8,7 @@ Parameters:
       Default: 'wordcount'      
    ContainerImage:
       Type: String
-      Default: '543414031934.dkr.ecr.us-east-1.amazonaws.com/wordcount:0.9.1'
+      Default: '543414031934.dkr.ecr.us-east-1.amazonaws.com/wordcount:0.9.2'
 
 Resources:
 
@@ -28,12 +28,33 @@ Resources:
         CidrBlock: 172.20.1.0/24
         VpcId: !Ref SamVPC
 
+   SamRouteTable:
+      Type: AWS::EC2::RouteTable
+      Properties:
+         VpcId: !Ref SamVPC
+         Tags:
+           - Key: "Name"
+             Value: "public_routes"
+
+   SamRouteTableAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+         RouteTableId: !Ref SamRouteTable
+         SubnetId: !Ref SamSubnet   
+
   # S3 bucket to use to collect input files. EventBridge will be monitoring this bucket.
-   SourceBucket: 
+   InputBucket: 
       Type: AWS::S3::Bucket
       Properties:
          BucketName: !Sub |-
-            sam-${AppName}-app-src
+            sam-${AppName}-app-input
+
+  # S3 bucket to use to store output files. 
+   OutputBucket: 
+      Type: AWS::S3::Bucket
+      Properties:
+         BucketName: !Sub |-
+            sam-${AppName}-app-output
             
    # S3 bucket to use to collect all logs the application generates
    LoggingBucket: 
@@ -89,7 +110,7 @@ Resources:
                - Type: AWS::S3::Object
                  Values:
                   - !Sub |-
-                    arn:aws:s3:::${SourceBucket}/
+                    arn:aws:s3:::${InputBucket}/
          IncludeGlobalServiceEvents: false
 
    # Lambda function invoked by EventBridge on events on the s3 application bucket. If PutObject results, fire off an ECS Fargate job to process.
@@ -106,10 +127,11 @@ Resources:
                LAUNCH_TYPE: "FARGATE"
                TASK_DEFINITION: !Ref SamECSTask
                SUBNET_ID: !Ref SamSubnet
+               OUTPUT_BUCKET: !Ref OutputBucket
                CONTAINER_NAME: !Sub |-
                   ${AppName}
            
-   # EventBridge monitors the SourceBucket...any events, it sends a message to the lambda for processing
+   # EventBridge monitors the InputBucket...any events, it sends a message to the lambda for processing
    EventRule: 
       Type: AWS::Events::Rule
       Properties: 
@@ -123,7 +145,7 @@ Resources:
                - "PutObject"
                requestParameters:
                   bucketName:
-                  - !Ref SourceBucket
+                  - !Ref InputBucket
          Targets: 
             - 
                Arn: 
@@ -171,7 +193,7 @@ Resources:
                Image: !Sub |-
                   ${ContainerImage}
                PortMappings:
-                  - ContainerPort: 8080
+                  - ContainerPort: 80
                LogConfiguration:
                   LogDriver: awslogs
                   Options:
@@ -202,10 +224,13 @@ Resources:
                   - 'ecr:BatchCheckLayerAvailability'
                   - 'ecr:GetDownloadUrlForLayer'
                   - 'ecr:BatchGetImage'
+                  - 'ecs:RunTask'
+                  - 'iam:PassRole'
                   # ECS tasks to upload logs to CloudWatch
+                  - 'logs:CreateLogGroup'
                   - 'logs:CreateLogStream'
                   - 'logs:PutLogEvents'
-                 Resource: '*'
+                 Resource: '*' 
                  
    # Cloudwatch group              
    CloudWatchLogsGroup:
@@ -242,15 +267,17 @@ Resources:
                    - 'logs:CreateLogStream'
                    - 'logs:PutLogEvents'
                  Resource: '*'
-                 
+                
    # VPC Endpoint that allows the private subnet in the VPC to talk to AWS's S3 service without using the public internet              
    SamS3Endpoint:
       Type: AWS::EC2::VPCEndpoint
-      Properties: 
-        ServiceName: com.amazonaws.us-east-1.s3
+      Properties:
+        ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
         VpcEndpointType: 'Gateway'
         VpcId: !Ref SamVPC
-
+        RouteTableIds: 
+         - !Ref SamRouteTable
+         
    # VPC Endpoint that allows the private subnet in the VPC to talk to AWS's logging service without using the public internet        
    SamLogsEndpoint:
       Type: AWS::EC2::VPCEndpoint
@@ -258,7 +285,7 @@ Resources:
         PrivateDnsEnabled: True
         SecurityGroupIds: 
           - !GetAtt SamVPC.DefaultSecurityGroup
-        ServiceName: 'com.amazonaws.us-east-1.logs'
+        ServiceName: !Sub 'com.amazonaws.${AWS::Region}.logs'
         SubnetIds: 
           - !Ref SamSubnet
         VpcEndpointType: 'Interface'
@@ -271,7 +298,7 @@ Resources:
         PrivateDnsEnabled: True
         SecurityGroupIds: 
           - !GetAtt SamVPC.DefaultSecurityGroup
-        ServiceName: 'com.amazonaws.us-east-1.ecr.api'
+        ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ecr.api'
         SubnetIds: 
           - !Ref SamSubnet
         VpcEndpointType: 'Interface'
@@ -284,7 +311,7 @@ Resources:
         PrivateDnsEnabled: True
         SecurityGroupIds: 
           - !GetAtt SamVPC.DefaultSecurityGroup
-        ServiceName: 'com.amazonaws.us-east-1.ecr.dkr'
+        ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ecr.dkr'
         SubnetIds: 
           - !Ref SamSubnet
         VpcEndpointType: 'Interface'

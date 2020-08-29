@@ -12,17 +12,20 @@ def getCmdLineParser():
     desc = 'Execute brute force word count'
     parser = argparse.ArgumentParser(description=desc)
 
-    parser.add_argument('-b', '--bucket', default=None,
-                        help='S3 bucket')
-
-    parser.add_argument('-r', '--region', default=None,
-                        help='S3 bucket region')
+    parser.add_argument('-b', '--inputBucket', default=None,
+                        help='S3 bucket for input')
 
     parser.add_argument('-k', '--inputKey', default=None,
                         help='input object in bucket')
 
+    parser.add_argument('-p', '--outputBucket', default=None,
+                        help='S3 bucket for output')
+
     parser.add_argument('-o', '--outputKey', default = None,
                         help='output object to write')
+
+    parser.add_argument('-r', '--region', default=None,
+                        help='Region for the S3 buckets')
 
     return parser
 
@@ -31,7 +34,8 @@ def getCmdLineParser():
 def main(argv):
 
    tmp = '/tmp'
-   bucket = None
+   inputBucket = None
+   outputBucket = None
    inputKey = None
    outputKey = None
    region = None
@@ -39,12 +43,15 @@ def main(argv):
    p = getCmdLineParser()
    args = p.parse_args()
    
-   if args.bucket is None:
-      bucket = os.environ['BUCKET']
+   if args.inputBucket is None:
+      inputBucket = os.environ['INPUTBUCKET']
       
    if args.inputKey is None:
       inputKey = os.environ['INPUTKEY']
-      
+
+   if args.outputBucket is None:
+      outputBucket = os.environ['OUTPUTBUCKET']
+
    if args.outputKey is None:
       outputKey = os.environ['OUTPUTKEY']
       
@@ -52,16 +59,16 @@ def main(argv):
       region = os.environ['REGION']
       
    
-   print('Starting processing %s/%s (%s)' % (bucket, inputKey, region))
+   print('Starting processing %s/%s (%s)' % (inputBucket, inputKey, region))
    # Get the input set 
    if os.path.exists('%s/%s' % (tmp, inputKey)):
      os.remove('%s/%s' % (tmp, inputKey))
    s3 = boto3.resource('s3', region_name=region)
    try:
-      s3.Bucket(bucket).download_file(inputKey, tmp+'/'+inputKey)
+      s3.Bucket(inputBucket).download_file(inputKey, tmp+'/'+inputKey)
    # todo: figure out the proper exceptions here...
    except Exception as e:
-      print('Error accessing %s/%s (%s). Error: %s' % (bucket, inputKey, region, e))
+      print('Error accessing %s/%s (%s). Error: %s' % (inputBucket, inputKey, region, e))
       print('Exiting...')
       sys.exit(-1)
       
@@ -93,11 +100,11 @@ def main(argv):
             # Add the word to dictionary with count 1 
             d[word] = 1
    try:         
-      s3.Object(bucket, outputKey).put(Body=json.dumps(d))
-      print('Finished processing %s/%s. Wrote %s/%s (%s)' % (bucket, inputKey, bucket, outputKey, region))
+      s3.Object(outputBucket, outputKey).put(Body=json.dumps(d))
+      print('Finished processing %s/%s. Wrote %s/%s (%s)' % (inputBucket, inputKey, outputBucket, outputKey, region))
    # todo: figure out the proper exceptions here...
    except Exception as e:
-      print('Error writing %s/%s (%s). Error: %s' % (bucket, outputKey, region, e))
+      print('Error writing %s/%s (%s). Error: %s' % (outputBucket, outputKey, region, e))
       print('Exiting...')
       sys.exit(-1)      
       

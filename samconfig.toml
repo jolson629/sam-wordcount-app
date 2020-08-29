@@ -3,10 +3,10 @@ version = 0.1
 [default.deploy]
 [default.deploy.parameters]
 stack_name = "sam-wordcount-app"
-s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-18bcsig0n4wvl"
+s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-yjvo9qzb6lxr"
 s3_prefix = "sam-wordcount-app"
 region = "us-east-1"
 confirm_changeset = true
 capabilities = "CAPABILITY_IAM"
-parameter_overrides = "AppName=\"wordcount\" ContainerImage=\"543414031934.dkr.ecr.us-east-1.amazonaws.com/wordcount:0.9.1\""
+parameter_overrides = "AppName=\"wordcount\" ContainerImage=\"543414031934.dkr.ecr.us-east-1.amazonaws.com/wordcount:0.9.2\""
 

@@ -4,7 +4,7 @@ import sys
 import boto3
 
 
-def run_fargate_task(cluster, launchType, subnet_id, taskDefinition, containerName, bucket, inputKey, outputKey, region):
+def run_fargate_task(cluster, launchType, subnet_id, taskDefinition, containerName, inputBucket, inputKey, outputBucket, outputKey, region):
    client = boto3.client('ecs', region_name=region)
    response = client.run_task(    
       cluster = cluster,
@@ -30,13 +30,18 @@ def run_fargate_task(cluster, launchType, subnet_id, taskDefinition, containerNa
                          'value': region
                      },
                      {
-                         'name': 'BUCKET',
-                         'value': bucket
+                         'name': 'INPUTBUCKET',
+                         'value': inputBucket
                      },
                      {
                          'name': 'INPUTKEY',
                          'value': inputKey
                      },
+                     {
+                         'name': 'OUTPUTBUCKET',
+                         'value': outputBucket
+                     },
+                     
                      {
                          'name': 'OUTPUTKEY',
                          'value': outputKey
@@ -59,9 +64,28 @@ def lambda_handler(event, context):
    taskDefinition = os.environ["TASK_DEFINITION"]
    subnetId = os.environ["SUBNET_ID"]
    containerName = os.environ["CONTAINER_NAME"]
+   outputBucket = os.environ["OUTPUT_BUCKET"]
    
+   error = None
+   if (cluster == None):
+      error = {'error': 'Required environment variable CLUSTER is not defined.'}
+   if (launchType == None):
+      error = {'error': 'Required environment variable LAUNCH_TYPE is not defined.'}
+   if (taskDefinition == None):
+      error = {'error': 'Required environment variable TASK_DEFINITION is not defined.'}
+   if (subnetId == None):
+      error = {'error': 'Required environment variable SUBNET_ID is not defined.'}
+   if (containerName == None):
+      error = {'error': 'Required environment variable CONTAINER_NAME is not defined.'}
+   if (outputBucket == None):
+      error = {'error': 'Required environment variable OUTPUT_BUCKET is not defined.'}
+
+   if error is not None:
+      print(json.dumps(error))      
+      sys.exit (-1)
+         
    s3Event = None
-   bucket = None
+   inputBucket = None
    inputKey = None
    region = None
    try:
@@ -73,26 +97,24 @@ def lambda_handler(event, context):
 
    if s3Event == 'PutObject':
       try:
-         bucket = event['detail']['requestParameters']['bucketName']
+         inputBucket = event['detail']['requestParameters']['bucketName']
          inputKey = event['detail']['requestParameters']['key']
          region = event['detail']['awsRegion']
       except Exception as e:
-         error = {'error': 'S3 message missing field bucket, key, or region', 'event':event}
+         error = {'error': 'S3 message missing field inputBucket, key, or region', 'event':event}
          print(json.dumps(error))
          sys.exit (-1) 
 
       try:
-         #TODO: Figure out a protocol for handeling the output file. Hardwired for now.         
-         outputKey = 'out.txt'
-         #TODO: Record Fargate execution time in the logs, if AWS doesn't do it for us already...
-         msg = {'message':'Start processing', 'event': s3Event, 'cluster': cluster, 'launchType': launchType, 'subnetId': subnetId, 'taskDefinition': taskDefinition, 'containerName': containerName, 'bucket': bucket, 'inputKey': inputKey, 'outputKey': outputKey, 'region': region}
+         outputKey = inputKey+'.out'
+         msg = {'message':'Start processing', 'event': s3Event, 'cluster': cluster, 'launchType': launchType, 'subnetId': subnetId, 'taskDefinition': taskDefinition, 'containerName': containerName, 'inputBucket': inputBucket, 'inputKey': inputKey, 'outputBucket':outputBucket, 'outputKey': outputKey, 'region': region}
          print(json.dumps(msg))
-         response = run_fargate_task(cluster, launchType, subnetId, taskDefinition, containerName, bucket, inputKey, outputKey, region)
-         msg = {'message':'Finished processing', 'response': response, 'event': s3Event, 'bucket': bucket, 'inputKey': inputKey, 'outputKey': outputKey, 'region': region}
+         response = run_fargate_task(cluster, launchType, subnetId, taskDefinition, containerName, inputBucket, inputKey, outputBucket, outputKey, region)
+         msg = {'message':'Finished processing', 'response': response, 'event': s3Event, 'inputBucket': inputBucket, 'inputKey': inputKey, 'outputBucket': outputBucket, 'outputKey': outputKey, 'region': region}
          print(json.dumps(msg))         
       except Exception as e:
          errorMsg = 'Error launching container on Fargate: %s' %(e)
-         error = {'error': errorMsg, 'event': s3Event, 'cluster': cluster, 'launchType': launchType, 'subnetId': subnetId, 'taskDefinition': taskDefinition, 'containerName': containerName, 'bucket': bucket, 'inputKey': inputKey, 'outputKey': outputKey, 'region': region}
+         error = {'error': errorMsg, 'event': s3Event, 'cluster': cluster, 'launchType': launchType, 'subnetId': subnetId, 'taskDefinition': taskDefinition, 'containerName': containerName, 'inputBucket': inputBucket, 'inputKey': inputKey, 'outputBucket': outputBucket, 'outputKey': outputKey, 'region': region}
          print(json.dumps(error))
          sys.exit (-1) 
             
