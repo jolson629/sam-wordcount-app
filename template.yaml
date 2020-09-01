@@ -9,6 +9,13 @@ Parameters:
    ContainerImage:
       Type: String
 
+   ContainerCPU:
+      Type: String
+      Default: "256"
+      
+   ContainerRAM:
+      Type: String      
+      Default: "512"
 
 Resources:
 
@@ -178,8 +185,8 @@ Resources:
    AppECSTask:
       Type: AWS::ECS::TaskDefinition
       Properties: 
-         Cpu: "256"
-         Memory: "512"
+         Cpu: !Ref ContainerCPU
+         Memory: !Ref ContainerRAM
          ExecutionRoleArn: !Ref ECSTaskRole
          Family: !Sub |-
             ${AppName}-app

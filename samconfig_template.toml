@@ -8,5 +8,5 @@ s3_prefix = "DEPLOYMENT_NAME/app"
 region = "REGION"
 confirm_changeset = CONFIRM_CHANGESET
 capabilities = "CAPABILITY_IAM"
-parameter_overrides = "AppName=\"APP_NAME\" ContainerImage=\"ECR_HOME/APP_NAME:IMAGE_VERSION\""
+parameter_overrides = "AppName=\"APP_NAME\" ContainerImage=\"ECR_HOME/APP_NAME:IMAGE_VERSION\" ContainerCPU=\"CONTAINER_CPU\" ContainerRAM=\"CONTAINER_RAM\""
 
