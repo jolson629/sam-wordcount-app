@@ -1,19 +1,19 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: App used to familiarize ourselves with a SAM deployment. Implementation is wordcount.
+Description: Template to use for a SAM deployment that leverages ECS Fargate jobs to process items uploaded to S3.
 
 Parameters:
    AppName:
       Type: String
-      Default: 'wordcount'      
+   
    ContainerImage:
       Type: String
-      Default: '543414031934.dkr.ecr.us-east-1.amazonaws.com/wordcount:0.9.2'
+
 
 Resources:
 
    # ECS in Fargate mode needs a subnet to run on. Create a VPC so we can create a subnet.
-   SamVPC:
+   AppVPC:
       Type: AWS::EC2::VPC
       Properties: 
          CidrBlock: 172.20.0.0/16
@@ -22,46 +22,46 @@ Resources:
          InstanceTenancy: default
          
    # Subnet to run an ECS container in Fargate mode.         
-   SamSubnet:
+   AppSubnet:
       Type: AWS::EC2::Subnet
       Properties:
         CidrBlock: 172.20.1.0/24
-        VpcId: !Ref SamVPC
+        VpcId: !Ref AppVPC
 
-   SamRouteTable:
+   AppRouteTable:
       Type: AWS::EC2::RouteTable
       Properties:
-         VpcId: !Ref SamVPC
+         VpcId: !Ref AppVPC
          Tags:
            - Key: "Name"
              Value: "public_routes"
 
-   SamRouteTableAssociation:
+   AppRouteTableAssociation:
       Type: AWS::EC2::SubnetRouteTableAssociation
       Properties:
-         RouteTableId: !Ref SamRouteTable
-         SubnetId: !Ref SamSubnet   
+         RouteTableId: !Ref AppRouteTable
+         SubnetId: !Ref AppSubnet   
 
   # S3 bucket to use to collect input files. EventBridge will be monitoring this bucket.
    InputBucket: 
       Type: AWS::S3::Bucket
       Properties:
          BucketName: !Sub |-
-            sam-${AppName}-app-input
+            ${AppName}-app-input
 
   # S3 bucket to use to store output files. 
    OutputBucket: 
       Type: AWS::S3::Bucket
       Properties:
          BucketName: !Sub |-
-            sam-${AppName}-app-output
+            ${AppName}-app-output
             
    # S3 bucket to use to collect all logs the application generates
    LoggingBucket: 
       Type: AWS::S3::Bucket
       Properties:
          BucketName: !Sub |-
-            sam-${AppName}-app-logs
+            ${AppName}-app-logs
 
   # Bucket policy enables CloudTrail to write to the logging bucket
    BucketPolicy: 
@@ -123,10 +123,10 @@ Resources:
          Role: !GetAtt LambdaRole.Arn
          Environment:
             Variables:
-               CLUSTER: !Ref SamECSCluster
+               CLUSTER: !Ref AppECSCluster
                LAUNCH_TYPE: "FARGATE"
-               TASK_DEFINITION: !Ref SamECSTask
-               SUBNET_ID: !Ref SamSubnet
+               TASK_DEFINITION: !Ref AppECSTask
+               SUBNET_ID: !Ref AppSubnet
                OUTPUT_BUCKET: !Ref OutputBucket
                CONTAINER_NAME: !Sub |-
                   ${AppName}
@@ -168,21 +168,21 @@ Resources:
                - "Arn"
                
    # ECS Cluster used to run the Fargate task to process the input using a containerized app.
-   SamECSCluster:
+   AppECSCluster:
       Type: AWS::ECS::Cluster
       Properties:
          ClusterName: !Sub |-
-            sam-${AppName}-app-cluster
+            ${AppName}-app-cluster
             
    # Fargate task on ECS Cluster
-   SamECSTask:
+   AppECSTask:
       Type: AWS::ECS::TaskDefinition
       Properties: 
          Cpu: "256"
          Memory: "512"
          ExecutionRoleArn: !Ref ECSTaskRole
          Family: !Sub |-
-            sam-${AppName}-app
+            ${AppName}-app
          NetworkMode: awsvpc
          RequiresCompatibilities:
             - FARGATE
@@ -237,7 +237,7 @@ Resources:
       Type: AWS::Logs::LogGroup
       Properties:
          LogGroupName: !Sub |-
-            /aws/ecs/sam-${AppName}-app
+            /aws/ecs/${AppName}-app
          RetentionInDays: 7  
          
          
@@ -269,50 +269,50 @@ Resources:
                  Resource: '*'
                 
    # VPC Endpoint that allows the private subnet in the VPC to talk to AWS's S3 service without using the public internet              
-   SamS3Endpoint:
+   AppS3Endpoint:
       Type: AWS::EC2::VPCEndpoint
       Properties:
         ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
         VpcEndpointType: 'Gateway'
-        VpcId: !Ref SamVPC
+        VpcId: !Ref AppVPC
         RouteTableIds: 
-         - !Ref SamRouteTable
+         - !Ref AppRouteTable
          
    # VPC Endpoint that allows the private subnet in the VPC to talk to AWS's logging service without using the public internet        
-   SamLogsEndpoint:
+   AppLogsEndpoint:
       Type: AWS::EC2::VPCEndpoint
       Properties: 
         PrivateDnsEnabled: True
         SecurityGroupIds: 
-          - !GetAtt SamVPC.DefaultSecurityGroup
+          - !GetAtt AppVPC.DefaultSecurityGroup
         ServiceName: !Sub 'com.amazonaws.${AWS::Region}.logs'
         SubnetIds: 
-          - !Ref SamSubnet
+          - !Ref AppSubnet
         VpcEndpointType: 'Interface'
-        VpcId: !Ref SamVPC
+        VpcId: !Ref AppVPC
 
    # VPC Endpoint that allows the private subnet in the VPC to talk to AWS's ECR service without using the public internet. ECR service #1
-   SamEcrApiEndpoint:
+   AppEcrApiEndpoint:
       Type: AWS::EC2::VPCEndpoint
       Properties: 
         PrivateDnsEnabled: True
         SecurityGroupIds: 
-          - !GetAtt SamVPC.DefaultSecurityGroup
+          - !GetAtt AppVPC.DefaultSecurityGroup
         ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ecr.api'
         SubnetIds: 
-          - !Ref SamSubnet
+          - !Ref AppSubnet
         VpcEndpointType: 'Interface'
-        VpcId: !Ref SamVPC
+        VpcId: !Ref AppVPC
         
    # VPC Endpoint that allows the private subnet in the VPC to talk to AWS's ECR service without using the public internet. ECR service #2
-   SamEcrDkrEndpoint:
+   AppEcrDkrEndpoint:
       Type: AWS::EC2::VPCEndpoint
       Properties: 
         PrivateDnsEnabled: True
         SecurityGroupIds: 
-          - !GetAtt SamVPC.DefaultSecurityGroup
+          - !GetAtt AppVPC.DefaultSecurityGroup
         ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ecr.dkr'
         SubnetIds: 
-          - !Ref SamSubnet
+          - !Ref AppSubnet
         VpcEndpointType: 'Interface'
-        VpcId: !Ref SamVPC                              
+        VpcId: !Ref AppVPC                              
