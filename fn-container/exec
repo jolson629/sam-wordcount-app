@@ -1,17 +1,22 @@
 #!/bin/bash
 
 # Change the following five lines to deploy...
-export APP_NAME=wordcount
-export ECR_HOME=543414031934.dkr.ecr.us-east-1.amazonaws.com
-export IMAGE_VERSION=0.9.2
-export CONTAINER_CPU=256
-export CONTAINER_RAM=512
-export REGION=us-east-1
-export CONFIRM_CHANGESET=true
+export AWS_ACCESS_KEY_ID=$((echo "${1}" | jq .aws_access_key_id) | tr -d '"' )
+export AWS_SECRET_ACCESS_KEY=$((echo "${1}" | jq .aws_secret_access_key) | tr -d '"' )
+export APP_NAME=$((echo "${1}" | jq .appname) | tr -d '"' )
+export ECR_HOME=$((echo "${1}" | jq .container) | tr -d '"' )
+export IMAGE_VERSION=$((echo "${1}" | jq .version) | tr -d '"' )
+export CONTAINER_CPU=$((echo "${1}" | jq .cpu) | tr -d '"' )
+export CONTAINER_RAM=$((echo "${1}" | jq .ram) | tr -d '"' )
+export REGION=$((echo "${1}" | jq .region) | tr -d '"' )
+export AWS_DEFAULT_REGION=${REGION}
+export CONFIRM_CHANGESET=false
 
 export DEPLOYMENT_NAME=$APP_NAME-deployment
 
-
+echo "CONTAINER_RAM: ${CONTAINER_RAM}"
+echo "REGION: ${REGION}"
+echo "AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}"
 # This is stunningly stupid...
 if ! aws s3api head-bucket --bucket "$DEPLOYMENT_NAME" 2>/dev/null; then
    echo Creating S3 bucket $DEPLOYMENT_NAME
@@ -30,6 +35,9 @@ sed -i "s/IMAGE_VERSION/$IMAGE_VERSION/g" samconfig.toml
 sed -i "s/CONTAINER_CPU/$CONTAINER_CPU/g" samconfig.toml
 sed -i "s/CONTAINER_RAM/$CONTAINER_RAM/g" samconfig.toml
 
-sam build
-sam deploy -t ./template.yaml 
 
+sam build
+sam deploy -t ./template.yaml
+
+
+echo '{"message" : "you did it, you really did it."}'
