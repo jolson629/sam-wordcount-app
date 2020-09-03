@@ -244,3 +244,9 @@ $RECYCLE.BIN/
 samconfig.toml
 
 # End of https://www.gitignore.io/api/osx,linux,python,windows,pycharm,visualstudiocode
+
+.aws
+.idea
+credentials
+dont-include.md
+recipesforsuccess/
